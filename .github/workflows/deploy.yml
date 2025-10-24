@@ -6,27 +6,30 @@ on:
 
 jobs:
   ssh_ping:
+    name: SSH connectivity check
     runs-on: ubuntu-latest
     steps:
-      - name: SSH ping (check creds & network)
+      - name: SSH ping (verify creds & network)
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
-          password: ${{ secrets.SSH_PASS }}
+          password: ${{ secrets.SSH_PASS }} # switch to 'key: ${{ secrets.SSH_PRIVATE_KEY }}' if using keys
           port: ${{ secrets.SSH_PORT }}
           timeout: 60s
           command_timeout: 2m
           script_stop: true
           script: |
+            set -euxo pipefail
             echo "Connected as $(whoami) on $(hostname)"
             uname -a
 
   deploy:
+    name: Deploy app
     needs: ssh_ping
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout (optional)
         uses: actions/checkout@v4
 
       - name: Deploy over SSH
@@ -34,28 +37,33 @@ jobs:
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
-          password: ${{ secrets.SSH_PASS }}
+          password: ${{ secrets.SSH_PASS }} # or: key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
           timeout: 60s
           command_timeout: 30m
           script_stop: true
           script: |
             set -euxo pipefail
+
+            # Ensure required tools
             if ! command -v git >/dev/null 2>&1; then
-              apt-get update -y && apt-get install -y git curl
+              apt-get update -y
+              apt-get install -y git curl
             fi
             if ! command -v node >/dev/null 2>&1; then
               curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
               apt-get install -y nodejs
               npm i -g pm2
             fi
+
             APP_DIR="${{ secrets.APP_DIR }}"
             REPO_URL="${{ secrets.REPO_URL }}"
             mkdir -p "$APP_DIR"
+
+            # Clone on first run; pull on subsequent runs
             if [ -d "$APP_DIR/.git" ]; then
               cd "$APP_DIR"
-              # Force main by default if current branch unknown
-              git fetch --all
+              git fetch --all --prune
               if git show-ref --verify --quiet refs/remotes/origin/main; then
                 git reset --hard origin/main
               else
@@ -65,7 +73,16 @@ jobs:
               git clone "$REPO_URL" "$APP_DIR"
               cd "$APP_DIR"
             fi
+
+            # Install deps (use install instead of ci to avoid lockfile requirement)
             npm install --omit=dev
+
+            # Start/Reload with PM2
             pm2 delete naic2 || true
             pm2 start server.js --name naic2
             pm2 save
+
+            # Optional: enable PM2 startup at boot
+            if command -v systemctl >/dev/null 2>&1; then
+              pm2 startup systemd -u $(whoami) --hp $(eval echo ~$(whoami)) || true
+            fi
