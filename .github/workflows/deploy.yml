@@ -5,10 +5,28 @@ on:
     branches: [ "main", "master" ]
 
 jobs:
-  deploy:
+  ssh_ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout (for version metadata only)
+      - name: SSH ping (check creds & network)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_PASS }}
+          port: ${{ secrets.SSH_PORT }}
+          timeout: 60s
+          command_timeout: 2m
+          script_stop: true
+          script: |
+            echo "Connected as $(whoami) on $(hostname)"
+            uname -a
+
+  deploy:
+    needs: ssh_ping
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Deploy over SSH
@@ -18,33 +36,36 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           password: ${{ secrets.SSH_PASS }}
           port: ${{ secrets.SSH_PORT }}
+          timeout: 60s
+          command_timeout: 30m
           script_stop: true
           script: |
-            set -e
+            set -euxo pipefail
             if ! command -v git >/dev/null 2>&1; then
-              apt-get update -y && apt-get install -y git
+              apt-get update -y && apt-get install -y git curl
             fi
             if ! command -v node >/dev/null 2>&1; then
               curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
               apt-get install -y nodejs
               npm i -g pm2
             fi
-
             APP_DIR="${{ secrets.APP_DIR }}"
             REPO_URL="${{ secrets.REPO_URL }}"
-
             mkdir -p "$APP_DIR"
-
             if [ -d "$APP_DIR/.git" ]; then
               cd "$APP_DIR"
+              # Force main by default if current branch unknown
               git fetch --all
-              git reset --hard origin/$(git symbolic-ref --short HEAD || echo main)
+              if git show-ref --verify --quiet refs/remotes/origin/main; then
+                git reset --hard origin/main
+              else
+                git reset --hard origin/master
+              fi
             else
               git clone "$REPO_URL" "$APP_DIR"
               cd "$APP_DIR"
             fi
-
-            npm ci --omit=dev
+            npm install --omit=dev
             pm2 delete naic2 || true
             pm2 start server.js --name naic2
             pm2 save
