@@ -31,15 +31,8 @@ jobs:
             REPO_URL="${{ secrets.REPO_URL }}"
             mkdir -p "$APP_DIR"
 
-            # Clone on first run; hard-reset on subsequent runs (single compound line)
-            [ -d "$APP_DIR/.git" ] && {
-              cd "$APP_DIR"
-              git fetch --all --prune
-              ( git reset --hard origin/main || git reset --hard origin/master )
-            } || {
-              git clone "$REPO_URL" "$APP_DIR"
-              cd "$APP_DIR"
-            }
+            # Single-line if/else to avoid standalone test lines
+            if [ -d "$APP_DIR/.git" ]; then cd "$APP_DIR" && git fetch --all --prune && ( git reset --hard origin/main || git reset --hard origin/master ); else git clone "$REPO_URL" "$APP_DIR" && cd "$APP_DIR"; fi
 
             npm install --omit=dev
             pm2 delete naic2 || true
