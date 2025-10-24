@@ -1,0 +1,23 @@
+{
+  "name": "naic2",
+  "version": "1.0.0",
+  "description": "NPN license & appointments lookup across multiple states (NAIC APIs)",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "NODE_ENV=development node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ejs": "^3.1.10",
+    "express": "^4.19.2",
+    "express-ejs-layouts": "^2.5.1",
+    "morgan": "^1.10.0",
+    "node-cache": "^5.1.2",
+    "p-limit": "^5.0.0",
+    "p-retry": "^6.2.0"
+  }
+}

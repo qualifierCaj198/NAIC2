@@ -1,0 +1,70 @@
+<form method="post" action="/lookup" class="card">
+  <label for="npn">Enter NPN</label>
+  <input type="text" id="npn" name="npn" value="<%= npn %>" placeholder="e.g., 20378670" required>
+  <button type="submit">Search</button>
+</form>
+
+<% if (error) { %>
+  <div class="error"><%= error %></div>
+<% } %>
+
+<% if (results) { %>
+  <div class="results">
+    <% results.forEach(r => { %>
+      <section class="state-card">
+        <h2><%= r.state %></h2>
+
+        <% if (!r.found) { %>
+          <div class="not-found">Not found in <%= r.state %></div>
+        <% } else { %>
+          <!-- Top: info from step 3 (search response) -->
+          <div class="license-top">
+            <div><strong>Name:</strong> <%= r.search?.name || '—' %></div>
+            <div><strong>NPN:</strong> <%= r.search?.npn || '—' %></div>
+            <div><strong>License #:</strong> <%= r.search?.licenseNumber || '—' %></div>
+            <div><strong>License Type:</strong> <%= r.search?.licenseType || '—' %></div>
+            <div><strong>License Eff. Date:</strong> <%= r.search?.licenseEffectiveDate || '—' %></div>
+            <div><strong>License Exp. Date:</strong> <%= r.search?.licenseExpirationDate || '—' %></div>
+            <div><strong>LOAs:</strong> <%= r.search?.loas || '—' %></div>
+            <div><strong>Business Phone:</strong> <%= r.search?.businessPhone || '—' %></div>
+            <div><strong>Business Address:</strong> <%= r.search?.businessAddress || '—' %></div>
+          </div>
+
+          <!-- Table: appointments -->
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Company</th>
+                  <th>NAIC #</th>
+                  <th>License Type</th>
+                  <th>LOA Type</th>
+                  <th>Appointment Date</th>
+                  <th>Effective Date</th>
+                  <th>Expiration Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% if (r.appointments && r.appointments.length) { %>
+                  <% r.appointments.forEach(a => { %>
+                    <tr>
+                      <td><%= a.companyName || '—' %></td>
+                      <td><%= a.naicno || '—' %></td>
+                      <td><%= a.licenseType || '—' %></td>
+                      <td><%= a.loaType || '—' %></td>
+                      <td><%= a.appointmentDate || '—' %></td>
+                      <td><%= a.effectiveDate || '—' %></td>
+                      <td><%= a.expirationDate || '—' %></td>
+                    </tr>
+                  <% }) %>
+                <% } else { %>
+                  <tr><td colspan="7" class="muted">No appointments returned.</td></tr>
+                <% } %>
+              </tbody>
+            </table>
+          </div>
+        <% } %>
+      </section>
+    <% }) %>
+  </div>
+<% } %>
