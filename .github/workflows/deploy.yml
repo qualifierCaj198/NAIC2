@@ -14,7 +14,9 @@ jobs:
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
-          password: ${{ secrets.SSH_PASS }} # switch to 'key: ${{ secrets.SSH_PRIVATE_KEY }}' if using keys
+          # Prefer key auth; otherwise keep 'password'
+          # key: ${{ secrets.SSH_PRIVATE_KEY }}
+          password: ${{ secrets.SSH_PASS }}
           port: ${{ secrets.SSH_PORT }}
           timeout: 60s
           command_timeout: 2m
@@ -29,15 +31,14 @@ jobs:
     needs: ssh_ping
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout (optional)
-        uses: actions/checkout@v4
-
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
-          password: ${{ secrets.SSH_PASS }} # or: key: ${{ secrets.SSH_PRIVATE_KEY }}
+          # Prefer key auth; otherwise keep 'password'
+          # key: ${{ secrets.SSH_PRIVATE_KEY }}
+          password: ${{ secrets.SSH_PASS }}
           port: ${{ secrets.SSH_PORT }}
           timeout: 60s
           command_timeout: 30m
@@ -46,35 +47,24 @@ jobs:
             set -euxo pipefail
 
             # Ensure required tools
-            if ! command -v git >/dev/null 2>&1; then
-              apt-get update -y
-              apt-get install -y git curl
-            fi
-            if ! command -v node >/dev/null 2>&1; then
-              curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-              apt-get install -y nodejs
-              npm i -g pm2
-            fi
+            command -v git  >/dev/null 2>&1 || { apt-get update -y && apt-get install -y git curl; }
+            command -v node >/dev/null 2>&1 || { curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs && npm i -g pm2; }
 
             APP_DIR="${{ secrets.APP_DIR }}"
             REPO_URL="${{ secrets.REPO_URL }}"
             mkdir -p "$APP_DIR"
 
-            # Clone on first run; pull on subsequent runs
-            if [ -d "$APP_DIR/.git" ]; then
+            # Clone on first run; hard-reset on subsequent runs
+            [ -d "$APP_DIR/.git" ] && {
               cd "$APP_DIR"
               git fetch --all --prune
-              if git show-ref --verify --quiet refs/remotes/origin/main; then
-                git reset --hard origin/main
-              else
-                git reset --hard origin/master
-              fi
-            else
+              ( git reset --hard origin/main || git reset --hard origin/master )
+            } || {
               git clone "$REPO_URL" "$APP_DIR"
               cd "$APP_DIR"
-            fi
+            }
 
-            # Install deps (use install instead of ci to avoid lockfile requirement)
+            # Install deps (works without lockfile)
             npm install --omit=dev
 
             # Start/Reload with PM2
@@ -83,6 +73,4 @@ jobs:
             pm2 save
 
             # Optional: enable PM2 startup at boot
-            if command -v systemctl >/dev/null 2>&1; then
-              pm2 startup systemd -u $(whoami) --hp $(eval echo ~$(whoami)) || true
-            fi
+            command -v systemctl >/dev/null 2>&1 && pm2 startup systemd -u "$(whoami)" --hp "$(eval echo ~"$(whoami)")" || true
